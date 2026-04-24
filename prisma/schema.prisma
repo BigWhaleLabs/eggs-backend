@@ -1,0 +1,455 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
+}
+
+generator typegraphql {
+  provider        = "typegraphql-prisma"
+  emitOnly        = ["enums", "models", "relationResolvers"]
+  simpleResolvers = true
+  useSimpleInputs = true
+  emitIdAsIDType  = true
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES")
+}
+
+model User {
+  /// @TypeGraphQL.omit(output: true, input: true)
+  createdAt                   DateTime                     @default(now())
+  /// @TypeGraphQL.omit(output: true, input: true)
+  updatedAt                   DateTime                     @updatedAt
+  id                          String                       @id @default(cuid())
+  serialId                    Int                          @unique @default(autoincrement())
+  /// @TypeGraphQL.omit(output: true, input: true)
+  authTokens                  AuthToken[]
+  /// @TypeGraphQL.omit(output: true, input: true)
+  farcasterNotificationTokens FarcasterNotificationToken[]
+  /// @TypeGraphQL.omit(output: true, input: true)
+  privyUserId                 String                       @unique
+  username                    String                       @unique
+  ethAddress                  String?
+  verifications               Verification[]
+  hens                        Hen[]
+  /// @TypeGraphQL.omit(output: true, input: true)
+  originalHens                Hen[]                        @relation("OriginalOwner")
+  /// @TypeGraphQL.omit(output: true, input: true)
+  cockCodes                   CockCode[]
+  unclaimedEggs               Float                        @default(0)
+  unclaimedDegen              Float                        @default(0)
+  /// @TypeGraphQL.omit(output: true, input: true)
+  referrals                   Referral[]                   @relation("Referrer")
+  /// @TypeGraphQL.omit(output: true, input: true)
+  referredBy                  Referral?                    @relation("Referred")
+  /// @TypeGraphQL.omit(output: true, input: true)
+  eggTransactions             EggTransaction[]
+  /// @TypeGraphQL.omit(output: true, input: true)
+  sentTransactions            EggTransaction[] @relation("SentTransactions")
+  /// @TypeGraphQL.omit(output: true, input: true)
+  coupons                     EggClaimCoupon[]
+  /// @TypeGraphQL.omit(output: true, input: true)
+  payments                    Payment[]
+  neynarUserScore             Float                        @default(0)
+  /// @TypeGraphQL.omit(output: true, input: true)
+  jackpotTickets              JackpotTicket[]
+  /// @TypeGraphQL.omit(output: true, input: true)
+  jackpotTicketClaimCoupons   JackpotTicketClaimCoupon[]
+  isVerifiedBot               Boolean                      @default(false)
+  /// @TypeGraphQL.omit(output: true, input: true)
+  botVerificationComment      String?
+  /// @TypeGraphQL.omit(output: true, input: true)
+  isAdmin                     Boolean                      @default(false)
+
+  tipsLeftForLikes            Int                          @default(0)
+  tipsLeftForComments         Int                          @default(0)
+  tipsLeftForFollows          Int                          @default(0)
+  totalHoldings               Float                        @default(0)
+  /// @TypeGraphQL.omit(output: true, input: true)
+  repeatsReplayTokens         Boolean                      @default(false)
+  /// @TypeGraphQL.omit(output: true, input: true)
+  noBrowserHeader             Boolean                      @default(false)
+
+  /// @TypeGraphQL.omit(output: true, input: true)
+  degenTransactions DegenTransaction[]
+
+  /// @TypeGraphQL.omit(output: true, input: true)
+  degenCoupons DegenClaimCoupon[]
+
+  /// @TypeGraphQL.omit(output: true, input: true)
+  tippingTransactionsGiven TippingTransaction[] @relation("Tipper")
+  
+  /// @TypeGraphQL.omit(output: true, input: true)  
+  tippingTransactionsReceived TippingTransaction[] @relation("TippedUser")
+
+  /// @TypeGraphQL.omit(output: true, input: true)
+  replayTokens ReplayToken[]
+
+  /// @TypeGraphQL.omit(output: true, input: true)
+  followEvents FollowEvent[]
+
+  /// @TypeGraphQL.omit(output: true, input: true)
+  proxies Proxy[]
+
+  @@index([neynarUserScore])
+  @@index([isVerifiedBot])
+}
+
+model AuthToken {
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  id        String   @id @default(cuid())
+  token     String
+  userAgent String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+
+  @@index([token])
+}
+
+model FarcasterNotificationToken {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  token     String   @unique
+  url       String
+}
+
+enum VerificationType {
+  FARCASTER
+}
+
+model Verification {
+  id        String           @id @default(cuid())
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id])
+  userId    String
+  avatar    String?
+  subjectId String           @unique
+  username  String?
+  type      VerificationType
+  connectedWallets ConnectedWallet[]
+
+  @@unique([subjectId, type])
+  @@index([userId])
+}
+
+model ConnectedWallet {
+  id            String       @id @default(cuid())
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  verification  Verification @relation(fields: [verificationId], references: [id], onDelete: Cascade)
+  verificationId String
+  address       String
+  lastVerified  DateTime     @default(now())
+
+  @@unique([verificationId, address])
+  @@index([verificationId])
+  @@index([address])
+}
+
+model Hen {
+  id             String                @id @default(cuid())
+  serialId       Int                   @unique @default(autoincrement())
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  user           User                  @relation(fields: [userId], references: [id])
+  userId         String
+  originalOwner  User?                 @relation("OriginalOwner", fields: [originalOwnerId], references: [id])
+  originalOwnerId String?
+  level          Int                   @default(1)
+  name           String
+  fertilized     Boolean               @default(false)
+  lastFertilized DateTime?
+  lastCollected  DateTime?
+  /// @TypeGraphQL.omit(output: true, input: true)
+  dailyYield     Int                   @default(1)
+  fertilizedBy   CockCode?             @relation(fields: [cockCodeId], references: [id])
+  cockCodeId     String?
+  levelUpgrades  ChickenLevelUpgrade[]
+  onchainOwnerAddress String?
+  lastTransferred DateTime?
+  yielding       Boolean               @default(true)
+
+  @@index([level])
+  @@index([userId, level])
+  @@index([userId])
+  @@index([originalOwnerId])
+}
+
+model CockCode {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  code      String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  hens      Hen[]
+}
+
+model Referral {
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  referrer     User     @relation("Referrer", fields: [referrerId], references: [id])
+  referrerId   String
+  referred     User     @relation("Referred", fields: [referredId], references: [id])
+  referredId   String   @unique
+  rewardAmount Int
+  verified     Boolean  @default(false)
+
+  @@index([referrerId])
+  @@index([referredId])
+  @@index([referrerId, verified])
+}
+
+enum TransactionType {
+  COLLECTION
+  UPGRADE_COST
+  UPGRADE_FAIL
+  REFERRAL_REWARD
+  HEN_PURCHASE
+  JACKPOT_REWARD
+  BURN_REWARD
+  STAKING_REWARD
+  TIP_RECEIVED
+}
+
+model DegenClaimCoupon {
+  id        String   @id @default(cuid())
+  serialId  Int      @unique @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  amount    Float
+  address   String
+
+  used      Boolean @default(false)
+  signature String?
+  message   String?
+
+  @@index([used, createdAt])
+}
+
+model DegenTransaction {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  amount    Float
+}
+
+model Payment {
+  id        String          @id @default(cuid())
+  createdAt DateTime        @default(now())
+  user      User            @relation(fields: [userId], references: [id])
+  userId    String
+  amount    Float
+  type      TransactionType
+  henId     String?
+  txHash    String?         @unique
+  paid      Boolean         @default(false)
+  used      Boolean         @default(false)
+}
+
+model EggTransaction {
+  id        String          @id @default(cuid())
+  createdAt DateTime        @default(now())
+  user      User            @relation(fields: [userId], references: [id])
+  userId    String
+  sender    User?           @relation("SentTransactions", fields: [senderId], references: [id])
+  senderId  String?
+  amount    Float
+  type      TransactionType
+  henId     String?
+
+  @@index([createdAt])
+  @@index([type])
+  @@index([createdAt, type])
+}
+
+enum TicketStatus {
+  PENDING
+  USED
+}
+
+model EggClaimCoupon {
+  id        String   @id @default(cuid())
+  serialId  Int      @unique @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  amount    Float
+  address   String
+
+  used      Boolean @default(false)
+  signature String?
+  message   String?
+
+  @@index([used, createdAt])
+}
+
+// schema.prisma
+
+model ChickenLevelUpgrade {
+  id              String   @id @default(cuid())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  hen             Hen      @relation(fields: [henId], references: [id])
+  henId           String
+  fromLevel       Int
+  toLevel         Int
+  result          Int // 0 = fail, 1 = success
+  used            Boolean  @default(false)
+  transactionHash String?  @unique // The definitive idempotency key
+
+  @@index([henId, used])
+}
+
+enum JackpotTicketType {
+  HOLD
+  UPGRADE
+  CLAIM_STREAK
+  REFERRAL
+}
+
+enum TippingType {
+  LIKE
+  REPLY
+}
+
+model JackpotTicket {
+  id        String            @id @default(cuid())
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  user      User              @relation(fields: [userId], references: [id])
+  userId    String
+  type      JackpotTicketType
+  claimed   Boolean           @default(false)
+  amount    Float
+}
+
+model JackpotTicketClaimCoupon {
+  id        String   @id @default(cuid())
+  serialId  Int      @unique @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  amount    Float
+  address   String
+
+  used      Boolean @default(false)
+  signature String?
+  message   String?
+  jackpotId Int
+
+  @@index([used, createdAt])
+}
+
+model BurnEvent {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  txHash      String   @unique
+  blockNumber BigInt
+  tokenAmount Float
+  burner      String
+  timestamp   DateTime
+}
+
+model ChickenTransferProcessedBlock {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  blockNumber BigInt
+}
+
+model ChickenBurnProcessedBlock {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  blockNumber BigInt
+}
+
+model ChickenLevelProcessedBlock {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  blockNumber BigInt
+}
+
+model ExtraChickenProcessedBlock {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  blockNumber BigInt
+}
+
+model TicketProcessedBlock {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  blockNumber BigInt
+}
+
+model TippingTransaction {
+  id          String      @id @default(cuid())
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  tipper      User        @relation("Tipper", fields: [tipperId], references: [id])
+  tipperId    String
+  tippedUser  User        @relation("TippedUser", fields: [tippedUserId], references: [id])
+  tippedUserId String
+  amount      Float
+  type        TippingType
+  farcasterCastHash String?
+  farcasterReplyText String?
+
+  @@index([tipperId])
+  @@index([tippedUserId])
+  @@index([createdAt])
+}
+
+model ReplayToken {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model FollowEvent {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  followerFid String   // The FID of the user who followed
+  followedUser User    @relation(fields: [followedUserId], references: [id])
+  followedUserId String
+
+  @@unique([followerFid, followedUserId])
+  @@index([followerFid])
+  @@index([followedUserId])
+  @@index([createdAt])
+}
+
+model Proxy {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  address   String   @unique // Ethereum address
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+
+  @@index([userId])
+  @@index([address])
+}
+

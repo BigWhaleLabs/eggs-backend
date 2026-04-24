@@ -1,0 +1,22 @@
+{
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit",
+    "source.addMissingImports": "explicit",
+    "source.removeUnusedImports": "explicit",
+    "source.fixAll.eslint": "explicit"
+  },
+  "eslint.enable": true,
+  "eslint.validate": ["typescript", "typescriptreact"],
+  "cSpell.words": [
+    "Degen",
+    "luxon",
+    "neynar",
+    "nongranta",
+    "Sybils",
+    "typegraphql",
+    "viem"
+  ],
+  "typescript.tsdk": "node_modules/typescript/lib"
+}

@@ -1,0 +1,19 @@
+[variables]
+NODE_ENV = "production"
+
+[phases.setup]
+nixPkgs = ["...", "python311", "openssl"]
+aptPkgs = ["...", "openssh-client", "build-essential", "libssl3", "libssl-dev", "openssl"]
+
+[phases.install]
+cmds = [
+  "bun install",                          
+  "ln -s /usr/lib/*/libssl.so.3 /usr/lib/libssl.so.3 || true", 
+  "ln -s /usr/lib/*/libcrypto.so.3 /usr/lib/libcrypto.so.3 || true",  
+]
+
+[phases.build]
+cmds = ["bun build-prod"]
+
+[start]
+cmd = "bun start"

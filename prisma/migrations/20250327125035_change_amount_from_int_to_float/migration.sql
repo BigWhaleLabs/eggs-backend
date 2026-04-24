@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "EggTransaction" ALTER COLUMN "amount" SET DATA TYPE DOUBLE PRECISION;
