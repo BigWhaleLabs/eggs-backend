@@ -4,6 +4,11 @@ import env from './env'
 import { publicClient } from './wallet'
 
 export default async function getEggBalance(ethAddress: `0x${string}`) {
+  const { totalBalance } = await getEggBalances(ethAddress)
+  return totalBalance
+}
+
+export async function getEggBalances(ethAddress: `0x${string}`) {
   try {
     const eggContract = getContract({
       address: env.EGGS_CONTRACT_ADDRESS,
@@ -17,9 +22,17 @@ export default async function getEggBalance(ethAddress: `0x${string}`) {
       eggContract.read.stakeOf([ethAddress]),
     ])
 
-    return balance + staked
+    return {
+      stakedBalance: staked,
+      totalBalance: balance + staked,
+      walletBalance: balance,
+    }
   } catch (error) {
     console.error('Error fetching token balance:', error)
-    return BigInt(0)
+    return {
+      stakedBalance: 0n,
+      totalBalance: 0n,
+      walletBalance: 0n,
+    }
   }
 }
