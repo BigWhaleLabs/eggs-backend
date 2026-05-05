@@ -1,9 +1,18 @@
-import { Wallet } from 'ethers'
+import { ethers, Wallet } from 'ethers'
 import { bytesToHex } from 'viem'
-import { turnIntoBytes } from './createUpgradeSignature'
 import env from './env'
 
 const chickensSuperHen = new Wallet(env.CHICKENS_SUPER_HEN_PRIVATE_KEY)
+
+function evenPad(value: string) {
+  return value.length % 2 === 0 ? value : `0${value}`
+}
+
+function turnIntoBytes(value: bigint) {
+  return ethers.getBytes(
+    ethers.zeroPadValue(`0x${evenPad(value.toString(16))}`, 32),
+  )
+}
 
 export default async function generateHenMintSignature(
   toAddress: string,
