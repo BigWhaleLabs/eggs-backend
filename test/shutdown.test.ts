@@ -225,6 +225,62 @@ describe('shutdown GraphQL surface', () => {
     expect(signature.signature.startsWith('0x')).toBe(true)
   })
 
+  test('looks up shutdown hens through an authenticated Farcaster fid', async () => {
+    const { default: ShutdownResolver } = await import(
+      'resolvers/ShutdownResolver'
+    )
+    let findUserArgs: unknown
+    let findManyArgs: unknown
+
+    await new ShutdownResolver().getMyShutdownHens(null, null, {
+      farcasterFid: 236443,
+      prisma: {
+        user: {
+          findFirst: async (args: unknown) => {
+            findUserArgs = args
+            return { id: 'user-1' }
+          },
+        },
+        hen: {
+          findMany: async (args: unknown) => {
+            findManyArgs = args
+            return []
+          },
+        },
+      },
+      user: null,
+    } as never)
+
+    expect(findUserArgs).toEqual({
+      select: {
+        id: true,
+      },
+      where: {
+        verifications: {
+          some: {
+            subjectId: '236443',
+            type: 'FARCASTER',
+          },
+        },
+      },
+    })
+    expect(findManyArgs).toEqual({
+      orderBy: {
+        serialId: 'asc',
+      },
+      select: {
+        id: true,
+        level: true,
+        name: true,
+        onchainOwnerAddress: true,
+        serialId: true,
+      },
+      where: {
+        userId: 'user-1',
+      },
+    })
+  })
+
   test('rejects mint signatures for another user hen', async () => {
     const { default: ShutdownResolver } = await import(
       'resolvers/ShutdownResolver'

@@ -36,16 +36,40 @@ function assertSignedAddress(ownerAddress: string, authSignature: string) {
 
 export async function resolveShutdownUser({
   authSignature,
+  farcasterFid,
   ownerAddress,
   prisma,
   user,
 }: {
   authSignature?: string | null
+  farcasterFid?: number | null
   ownerAddress?: string | null
   prisma: PrismaClient
   user?: Pick<User, 'id'> | null
 }) {
   if (user) return user
+
+  if (farcasterFid) {
+    const farcasterUser = await prisma.user.findFirst({
+      where: {
+        verifications: {
+          some: {
+            subjectId: String(farcasterFid),
+            type: 'FARCASTER',
+          },
+        },
+      },
+      select: {
+        id: true,
+      },
+    })
+
+    if (!farcasterUser) {
+      throw new GraphQLError('No Eggs user found for this Farcaster account')
+    }
+
+    return farcasterUser
+  }
 
   if (!ownerAddress || !authSignature) {
     throw new GraphQLError('Wallet signature required')

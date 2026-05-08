@@ -30,6 +30,7 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
+    "@farcaster/quick-auth": "^0.0.8",
     "@prisma/client": "^5.22.0",
     "dotenv": "^16.4.7",
     "envalid": "^8.0.0",
