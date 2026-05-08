@@ -1,6 +1,7 @@
 import 'reflect-metadata'
 
 import { describe, expect, test } from 'bun:test'
+import { parse, validate } from 'graphql'
 import {
   buildChickenMetadata,
   isChickenMetadataSybil,
@@ -53,6 +54,9 @@ describe('shutdown GraphQL surface', () => {
       'getMyShutdownHens',
     ])
     expect(Object.keys(mutationFields).sort()).toEqual(['getHenMintSignature'])
+    expect(queryFields.getMyShutdownHens.args.map((arg) => arg.name)).toEqual([
+      'ownerAddress',
+    ])
 
     for (const query of removedQueries) {
       expect(queryFields[query]).toBeUndefined()
@@ -61,6 +65,34 @@ describe('shutdown GraphQL surface', () => {
     for (const mutation of removedMutations) {
       expect(mutationFields[mutation]).toBeUndefined()
     }
+  })
+
+  test('accepts the frontend shutdown hens query shape', async () => {
+    const { default: ShutdownResolver } = await import(
+      'resolvers/ShutdownResolver'
+    )
+    const schema = await buildSchema({
+      authChecker: () => true,
+      resolvers: [ShutdownResolver],
+      validate: false,
+    })
+
+    const errors = validate(
+      schema,
+      parse(`
+        query getMyShutdownHens($ownerAddress: String) {
+          getMyShutdownHens(ownerAddress: $ownerAddress) {
+            id
+            serialId
+            name
+            level
+            onchainOwnerAddress
+          }
+        }
+      `),
+    )
+
+    expect(errors).toEqual([])
   })
 })
 

@@ -64,8 +64,13 @@ export default class ShutdownResolver {
   @Authorized()
   @Query(() => [ShutdownHen])
   async getMyShutdownHens(
+    @Arg('ownerAddress', { nullable: true }) ownerAddress: string | null,
     @Ctx() { prisma, user }: AuthorizedContext,
   ): Promise<ShutdownHen[]> {
+    if (ownerAddress && !ethers.isAddress(ownerAddress)) {
+      throw new GraphQLError('Invalid Ethereum address')
+    }
+
     return prisma.hen.findMany({
       where: {
         userId: user.id,
