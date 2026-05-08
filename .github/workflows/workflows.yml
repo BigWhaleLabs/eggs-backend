@@ -1,17 +1,25 @@
 name: Build and Lint Code
+
 on:
   pull_request:
-    types: [synchronize, opened]
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
 jobs:
   build-and-lint:
     name: Build and Lint
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
@@ -54,8 +62,16 @@ jobs:
       - name: Type check
         run: |
           echo "Running TypeScript checks..."
-          bun run tsc || {
+          bun run build-ts || {
             echo "❌ TypeScript type check failed. Please fix the type errors before merging."
+            exit 1
+          }
+
+      - name: Build production bundle
+        run: |
+          echo "Building production bundle..."
+          bun run build-prod || {
+            echo "❌ Production build failed. Please fix the build errors before merging."
             exit 1
           }
 
