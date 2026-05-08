@@ -31,7 +31,7 @@ jobs:
           sudo ln -s /usr/lib/*/libcrypto.so.3 /usr/lib/libcrypto.so.3 || true
 
       - name: Cache dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             node_modules
