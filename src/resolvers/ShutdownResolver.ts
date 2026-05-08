@@ -2,10 +2,9 @@ import { ethers } from 'ethers'
 import { GraphQLError } from 'graphql'
 import generateHenMintSignature from 'helpers/generateHenMintSignature'
 import { getEggBalances } from 'helpers/getEggBalance'
-import type { AuthorizedContext } from 'models/Context'
+import type Context from 'models/Context'
 import {
   Arg,
-  Authorized,
   Ctx,
   Field,
   Mutation,
@@ -61,19 +60,46 @@ class EggStakeBalance {
 
 @Resolver()
 export default class ShutdownResolver {
-  @Authorized()
   @Query(() => [ShutdownHen])
   async getMyShutdownHens(
     @Arg('ownerAddress', { nullable: true }) ownerAddress: string | null,
-    @Ctx() { prisma, user }: AuthorizedContext,
+    @Ctx() { prisma, user }: Context,
   ): Promise<ShutdownHen[]> {
     if (ownerAddress && !ethers.isAddress(ownerAddress)) {
       throw new GraphQLError('Invalid Ethereum address')
     }
 
+    const normalizedOwnerAddress = ownerAddress
+      ? ethers.getAddress(ownerAddress)
+      : null
+    const authenticatedUserId = user?.id
+
+    if (!normalizedOwnerAddress && !authenticatedUserId) {
+      throw new GraphQLError('Wallet address or auth token required')
+    }
+
     return prisma.hen.findMany({
       where: {
-        userId: user.id,
+        ...(normalizedOwnerAddress
+          ? {
+              OR: [
+                {
+                  onchainOwnerAddress: {
+                    equals: normalizedOwnerAddress,
+                    mode: 'insensitive' as const,
+                  },
+                },
+                {
+                  user: {
+                    ethAddress: {
+                      equals: normalizedOwnerAddress,
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                },
+              ],
+            }
+          : { userId: authenticatedUserId }),
       },
       orderBy: {
         serialId: 'asc',
@@ -107,20 +133,28 @@ export default class ShutdownResolver {
     }
   }
 
-  @Authorized()
   @Mutation(() => HenMintSignature)
   async getHenMintSignature(
     @Arg('henSerialId') henSerialId: number,
     @Arg('toAddress') toAddress: string,
-    @Ctx() { prisma, user }: AuthorizedContext,
+    @Ctx() { prisma, user }: Context,
   ): Promise<HenMintSignature> {
     if (!ethers.isAddress(toAddress)) {
       throw new GraphQLError('Invalid Ethereum address')
     }
 
+    const normalizedToAddress = ethers.getAddress(toAddress)
+
     const hen = await prisma.hen.findUnique({
       where: {
         serialId: henSerialId,
+      },
+      include: {
+        user: {
+          select: {
+            ethAddress: true,
+          },
+        },
       },
     })
 
@@ -128,12 +162,17 @@ export default class ShutdownResolver {
       throw new GraphQLError('Hen not found')
     }
 
-    if (hen.userId !== user.id) {
+    const ownedByLegacyAuth = !!user && hen.userId === user.id
+    const ownedByTargetWallet =
+      !!hen.user.ethAddress &&
+      hen.user.ethAddress.toLowerCase() === normalizedToAddress.toLowerCase()
+
+    if (!ownedByLegacyAuth && !ownedByTargetWallet) {
       throw new GraphQLError('You do not own this hen')
     }
 
     const signatureData = await generateHenMintSignature(
-      toAddress,
+      normalizedToAddress,
       BigInt(henSerialId),
     )
 

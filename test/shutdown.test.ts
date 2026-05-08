@@ -94,6 +94,129 @@ describe('shutdown GraphQL surface', () => {
 
     expect(errors).toEqual([])
   })
+
+  test('looks up shutdown hens by owner wallet without auth', async () => {
+    const { default: ShutdownResolver } = await import(
+      'resolvers/ShutdownResolver'
+    )
+    const ownerAddress = '0x1111111111111111111111111111111111111111'
+    let findManyArgs: unknown
+
+    await new ShutdownResolver().getMyShutdownHens(ownerAddress, {
+      prisma: {
+        hen: {
+          findMany: async (args: unknown) => {
+            findManyArgs = args
+            return []
+          },
+        },
+      },
+      user: null,
+    } as never)
+
+    expect(findManyArgs).toEqual({
+      orderBy: {
+        serialId: 'asc',
+      },
+      select: {
+        id: true,
+        level: true,
+        name: true,
+        onchainOwnerAddress: true,
+        serialId: true,
+      },
+      where: {
+        OR: [
+          {
+            onchainOwnerAddress: {
+              equals: ownerAddress,
+              mode: 'insensitive',
+            },
+          },
+          {
+            user: {
+              ethAddress: {
+                equals: ownerAddress,
+                mode: 'insensitive',
+              },
+            },
+          },
+        ],
+      },
+    })
+  })
+
+  test('issues mint signatures for hens linked to the target wallet without auth', async () => {
+    const { default: ShutdownResolver } = await import(
+      'resolvers/ShutdownResolver'
+    )
+    const ownerAddress = '0x1111111111111111111111111111111111111111'
+    let findUniqueArgs: unknown
+
+    const signature = await new ShutdownResolver().getHenMintSignature(
+      42,
+      ownerAddress,
+      {
+        prisma: {
+          hen: {
+            findUnique: async (args: unknown) => {
+              findUniqueArgs = args
+              return {
+                id: 'hen-1',
+                userId: 'user-1',
+                user: {
+                  ethAddress: ownerAddress,
+                },
+              }
+            },
+          },
+        },
+        user: null,
+      } as never,
+    )
+
+    expect(findUniqueArgs).toEqual({
+      include: {
+        user: {
+          select: {
+            ethAddress: true,
+          },
+        },
+      },
+      where: {
+        serialId: 42,
+      },
+    })
+    expect(signature.message.startsWith('0x')).toBe(true)
+    expect(signature.signature.startsWith('0x')).toBe(true)
+  })
+
+  test('rejects unauthenticated mint signatures for a different wallet', async () => {
+    const { default: ShutdownResolver } = await import(
+      'resolvers/ShutdownResolver'
+    )
+
+    await expect(
+      new ShutdownResolver().getHenMintSignature(
+        42,
+        '0x1111111111111111111111111111111111111111',
+        {
+          prisma: {
+            hen: {
+              findUnique: async () => ({
+                id: 'hen-1',
+                userId: 'user-1',
+                user: {
+                  ethAddress: '0x2222222222222222222222222222222222222222',
+                },
+              }),
+            },
+          },
+          user: null,
+        } as never,
+      ),
+    ).rejects.toThrow('You do not own this hen')
+  })
 })
 
 describe('chicken NFT metadata', () => {

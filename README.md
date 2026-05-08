@@ -5,7 +5,7 @@ surface:
 
 - read-only `$EGGS` wallet/staked balance lookup for unstake UI support;
 - chicken NFT metadata at `/chicken-metadata/:serialId.json`;
-- legacy-token-authenticated chicken mint signatures for existing chickens.
+- wallet-address and legacy-token chicken lookup/signatures for existing chickens.
 
 Removed responsibilities include Privy login, egg claiming, emission accrual,
 jackpot tickets/accounting/draws, Farcaster webhooks, referrals, background
