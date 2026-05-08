@@ -98,7 +98,7 @@ describe('shutdown GraphQL surface', () => {
     expect(errors).toEqual([])
   })
 
-  test('looks up off-chain shutdown hens through a signed connected wallet', async () => {
+  test('looks up shutdown hens through a signed connected wallet', async () => {
     const { default: ShutdownResolver } = await import(
       'resolvers/ShutdownResolver'
     )
@@ -175,7 +175,6 @@ describe('shutdown GraphQL surface', () => {
         serialId: true,
       },
       where: {
-        onchainOwnerAddress: null,
         userId: 'user-1',
       },
     })

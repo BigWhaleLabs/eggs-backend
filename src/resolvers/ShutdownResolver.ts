@@ -76,7 +76,6 @@ export default class ShutdownResolver {
 
     return prisma.hen.findMany({
       where: {
-        onchainOwnerAddress: null,
         userId: authorizedUser.id,
       },
       orderBy: {
