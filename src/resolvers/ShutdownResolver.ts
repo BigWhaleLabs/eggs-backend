@@ -65,10 +65,11 @@ export default class ShutdownResolver {
   async getMyShutdownHens(
     @Arg('ownerAddress', { nullable: true }) ownerAddress: string | null,
     @Arg('authSignature', { nullable: true }) authSignature: string | null,
-    @Ctx() { prisma, user }: Context,
+    @Ctx() { farcasterFid, prisma, user }: Context,
   ): Promise<ShutdownHen[]> {
     const authorizedUser = await resolveShutdownUser({
       authSignature,
+      farcasterFid,
       ownerAddress,
       prisma,
       user,
@@ -115,7 +116,7 @@ export default class ShutdownResolver {
     @Arg('henSerialId') henSerialId: number,
     @Arg('toAddress') toAddress: string,
     @Arg('authSignature', { nullable: true }) authSignature: string | null,
-    @Ctx() { prisma, user }: Context,
+    @Ctx() { farcasterFid, prisma, user }: Context,
   ): Promise<HenMintSignature> {
     if (!ethers.isAddress(toAddress)) {
       throw new GraphQLError('Invalid Ethereum address')
@@ -124,6 +125,7 @@ export default class ShutdownResolver {
     const normalizedToAddress = ethers.getAddress(toAddress)
     const authorizedUser = await resolveShutdownUser({
       authSignature,
+      farcasterFid,
       ownerAddress: normalizedToAddress,
       prisma,
       user,

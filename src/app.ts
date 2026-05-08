@@ -1,5 +1,9 @@
 import 'reflect-metadata'
 
+import {
+  Errors,
+  createClient as createQuickAuthClient,
+} from '@farcaster/quick-auth'
 import { createYoga, type YogaInitialContext } from 'graphql-yoga'
 import {
   buildChickenMetadata,
@@ -11,6 +15,8 @@ import prismaClient from 'helpers/prismaClient'
 import type Context from 'models/Context'
 import ShutdownResolver from 'resolvers/ShutdownResolver'
 import { buildSchema } from 'type-graphql'
+
+const quickAuthClient = createQuickAuthClient()
 
 const schema = await buildSchema({
   authChecker: ({ context }: { context: Context }, roles: string[]) => {
@@ -33,12 +39,44 @@ const yoga = createYoga({
     const token: string | undefined =
       request?.headers.get('authorization') || connectionParams?.authorization
 
-    if (!token) return { prisma: prismaClient, user: null }
+    if (!token) return { farcasterFid: null, prisma: prismaClient, user: null }
+
+    if (token.startsWith('Bearer ')) {
+      try {
+        const payload = await quickAuthClient.verifyJwt({
+          domain: env.FARCASTER_QUICK_AUTH_DOMAIN,
+          token: token.slice('Bearer '.length),
+        })
+
+        const user = await prismaClient.user.findFirst({
+          where: {
+            verifications: {
+              some: {
+                subjectId: String(payload.sub),
+                type: 'FARCASTER',
+              },
+            },
+          },
+        })
+
+        return {
+          farcasterFid: payload.sub,
+          prisma: prismaClient,
+          user,
+        }
+      } catch (error) {
+        if (!(error instanceof Errors.InvalidTokenError)) {
+          console.error('Farcaster Quick Auth verification failed', error)
+        }
+
+        return { farcasterFid: null, prisma: prismaClient, user: null }
+      }
+    }
 
     try {
       verifyAuthToken(token)
     } catch {
-      return { prisma: prismaClient, user: null }
+      return { farcasterFid: null, prisma: prismaClient, user: null }
     }
 
     const user = await prismaClient.user.findFirst({
@@ -51,7 +89,7 @@ const yoga = createYoga({
       },
     })
 
-    return { prisma: prismaClient, user }
+    return { farcasterFid: null, prisma: prismaClient, user }
   },
   graphqlEndpoint: '/',
   landingPage: false,
