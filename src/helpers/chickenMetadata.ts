@@ -2,6 +2,7 @@ import type { Hen, User } from '@prisma/client'
 
 const MIN_METADATA_NEYNAR_SCORE = 0.69
 const HOLDINGS_SYBIL_BYPASS = 15_000
+const NFT_IMAGE_VERSION = '20260508-nft-assets'
 
 type ChickenMetadataHen = Pick<Hen, 'createdAt' | 'level' | 'name' | 'serialId'>
 type ChickenMetadataUser = Pick<
@@ -36,7 +37,7 @@ export function buildChickenMetadata({
   return {
     name: `${hen.name} #${hen.serialId}`,
     description: `A chicken from the $EGGS ecosystem. Level ${hen.level}.`,
-    image: `https://eggs.name/nft/${isSybil ? 'nonlvl' : `lvl${hen.level}`}.png`,
+    image: `https://eggs.name/nft/${isSybil ? 'nonlvl' : `lvl${hen.level}`}.png?v=${NFT_IMAGE_VERSION}`,
     attributes: [
       {
         trait_type: 'Level',

@@ -291,7 +291,9 @@ describe('chicken NFT metadata', () => {
     })
 
     expect(metadata.name).toBe('Ada #123')
-    expect(metadata.image).toBe('https://eggs.name/nft/lvl4.png')
+    expect(metadata.image).toBe(
+      'https://eggs.name/nft/lvl4.png?v=20260508-nft-assets',
+    )
     expect(
       metadata.attributes.map((attribute) => attribute.trait_type),
     ).toEqual([
