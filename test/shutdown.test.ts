@@ -1,10 +1,13 @@
 import 'reflect-metadata'
 
 import { describe, expect, test } from 'bun:test'
+import { Wallet } from 'ethers'
+import { parse, validate } from 'graphql'
 import {
   buildChickenMetadata,
   isChickenMetadataSybil,
 } from 'helpers/chickenMetadata'
+import { getShutdownAuthorizationMessage } from 'helpers/shutdownAuth'
 import { buildSchema } from 'type-graphql'
 
 process.env.BASE_RPC_URL = 'http://127.0.0.1:8545'
@@ -53,6 +56,10 @@ describe('shutdown GraphQL surface', () => {
       'getMyShutdownHens',
     ])
     expect(Object.keys(mutationFields).sort()).toEqual(['getHenMintSignature'])
+    expect(queryFields.getMyShutdownHens.args.map((arg) => arg.name)).toEqual([
+      'authSignature',
+      'ownerAddress',
+    ])
 
     for (const query of removedQueries) {
       expect(queryFields[query]).toBeUndefined()
@@ -61,6 +68,208 @@ describe('shutdown GraphQL surface', () => {
     for (const mutation of removedMutations) {
       expect(mutationFields[mutation]).toBeUndefined()
     }
+  })
+
+  test('accepts the frontend shutdown hens query shape', async () => {
+    const { default: ShutdownResolver } = await import(
+      'resolvers/ShutdownResolver'
+    )
+    const schema = await buildSchema({
+      authChecker: () => true,
+      resolvers: [ShutdownResolver],
+      validate: false,
+    })
+
+    const errors = validate(
+      schema,
+      parse(`
+        query getMyShutdownHens($ownerAddress: String) {
+          getMyShutdownHens(ownerAddress: $ownerAddress, authSignature: "0xabc") {
+            id
+            serialId
+            name
+            level
+            onchainOwnerAddress
+          }
+        }
+      `),
+    )
+
+    expect(errors).toEqual([])
+  })
+
+  test('looks up off-chain shutdown hens through a signed connected wallet', async () => {
+    const { default: ShutdownResolver } = await import(
+      'resolvers/ShutdownResolver'
+    )
+    const wallet = Wallet.createRandom()
+    const ownerAddress = wallet.address
+    const authSignature = await wallet.signMessage(
+      getShutdownAuthorizationMessage(ownerAddress),
+    )
+    let findUsersArgs: unknown
+    let findManyArgs: unknown
+
+    await new ShutdownResolver().getMyShutdownHens(
+      ownerAddress,
+      authSignature,
+      {
+        prisma: {
+          user: {
+            findMany: async (args: unknown) => {
+              findUsersArgs = args
+              return [{ id: 'user-1' }]
+            },
+          },
+          hen: {
+            findMany: async (args: unknown) => {
+              findManyArgs = args
+              return []
+            },
+          },
+        },
+        user: null,
+      } as never,
+    )
+
+    expect(findUsersArgs).toEqual({
+      select: {
+        id: true,
+      },
+      take: 2,
+      where: {
+        OR: [
+          {
+            ethAddress: {
+              equals: ownerAddress,
+              mode: 'insensitive',
+            },
+          },
+          {
+            verifications: {
+              some: {
+                connectedWallets: {
+                  some: {
+                    address: {
+                      equals: ownerAddress,
+                      mode: 'insensitive',
+                    },
+                  },
+                },
+                type: 'FARCASTER',
+              },
+            },
+          },
+        ],
+      },
+    })
+    expect(findManyArgs).toEqual({
+      orderBy: {
+        serialId: 'asc',
+      },
+      select: {
+        id: true,
+        level: true,
+        name: true,
+        onchainOwnerAddress: true,
+        serialId: true,
+      },
+      where: {
+        onchainOwnerAddress: null,
+        userId: 'user-1',
+      },
+    })
+  })
+
+  test('issues mint signatures only for hens owned by the signed wallet user', async () => {
+    const { default: ShutdownResolver } = await import(
+      'resolvers/ShutdownResolver'
+    )
+    const wallet = Wallet.createRandom()
+    const ownerAddress = wallet.address
+    const authSignature = await wallet.signMessage(
+      getShutdownAuthorizationMessage(ownerAddress),
+    )
+    let findFirstArgs: unknown
+
+    const signature = await new ShutdownResolver().getHenMintSignature(
+      42,
+      ownerAddress,
+      authSignature,
+      {
+        prisma: {
+          user: {
+            findMany: async () => [{ id: 'user-1' }],
+          },
+          hen: {
+            findFirst: async (args: unknown) => {
+              findFirstArgs = args
+              return {
+                id: 'hen-1',
+                onchainOwnerAddress: null,
+                userId: 'user-1',
+              }
+            },
+          },
+        },
+        user: null,
+      } as never,
+    )
+
+    expect(findFirstArgs).toEqual({
+      where: {
+        serialId: 42,
+        userId: 'user-1',
+      },
+    })
+    expect(signature.message.startsWith('0x')).toBe(true)
+    expect(signature.signature.startsWith('0x')).toBe(true)
+  })
+
+  test('rejects mint signatures for another user hen', async () => {
+    const { default: ShutdownResolver } = await import(
+      'resolvers/ShutdownResolver'
+    )
+    const wallet = Wallet.createRandom()
+    const authSignature = await wallet.signMessage(
+      getShutdownAuthorizationMessage(wallet.address),
+    )
+
+    await expect(
+      new ShutdownResolver().getHenMintSignature(
+        42,
+        wallet.address,
+        authSignature,
+        {
+          prisma: {
+            user: {
+              findMany: async () => [{ id: 'user-1' }],
+            },
+            hen: {
+              findFirst: async () => null,
+            },
+          },
+          user: null,
+        } as never,
+      ),
+    ).rejects.toThrow('Hen not found')
+  })
+
+  test('rejects wallet queries without a valid signature', async () => {
+    const { default: ShutdownResolver } = await import(
+      'resolvers/ShutdownResolver'
+    )
+
+    await expect(
+      new ShutdownResolver().getMyShutdownHens(
+        '0x1111111111111111111111111111111111111111',
+        null,
+        {
+          prisma: {},
+          user: null,
+        } as never,
+      ),
+    ).rejects.toThrow('Wallet signature required')
   })
 })
 

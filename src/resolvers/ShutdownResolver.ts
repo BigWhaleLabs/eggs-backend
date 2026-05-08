@@ -2,10 +2,10 @@ import { ethers } from 'ethers'
 import { GraphQLError } from 'graphql'
 import generateHenMintSignature from 'helpers/generateHenMintSignature'
 import { getEggBalances } from 'helpers/getEggBalance'
-import type { AuthorizedContext } from 'models/Context'
+import { resolveShutdownUser } from 'helpers/shutdownAuth'
+import type Context from 'models/Context'
 import {
   Arg,
-  Authorized,
   Ctx,
   Field,
   Mutation,
@@ -61,14 +61,23 @@ class EggStakeBalance {
 
 @Resolver()
 export default class ShutdownResolver {
-  @Authorized()
   @Query(() => [ShutdownHen])
   async getMyShutdownHens(
-    @Ctx() { prisma, user }: AuthorizedContext,
+    @Arg('ownerAddress', { nullable: true }) ownerAddress: string | null,
+    @Arg('authSignature', { nullable: true }) authSignature: string | null,
+    @Ctx() { prisma, user }: Context,
   ): Promise<ShutdownHen[]> {
+    const authorizedUser = await resolveShutdownUser({
+      authSignature,
+      ownerAddress,
+      prisma,
+      user,
+    })
+
     return prisma.hen.findMany({
       where: {
-        userId: user.id,
+        onchainOwnerAddress: null,
+        userId: authorizedUser.id,
       },
       orderBy: {
         serialId: 'asc',
@@ -102,20 +111,29 @@ export default class ShutdownResolver {
     }
   }
 
-  @Authorized()
   @Mutation(() => HenMintSignature)
   async getHenMintSignature(
     @Arg('henSerialId') henSerialId: number,
     @Arg('toAddress') toAddress: string,
-    @Ctx() { prisma, user }: AuthorizedContext,
+    @Arg('authSignature', { nullable: true }) authSignature: string | null,
+    @Ctx() { prisma, user }: Context,
   ): Promise<HenMintSignature> {
     if (!ethers.isAddress(toAddress)) {
       throw new GraphQLError('Invalid Ethereum address')
     }
 
-    const hen = await prisma.hen.findUnique({
+    const normalizedToAddress = ethers.getAddress(toAddress)
+    const authorizedUser = await resolveShutdownUser({
+      authSignature,
+      ownerAddress: normalizedToAddress,
+      prisma,
+      user,
+    })
+
+    const hen = await prisma.hen.findFirst({
       where: {
         serialId: henSerialId,
+        userId: authorizedUser.id,
       },
     })
 
@@ -123,12 +141,12 @@ export default class ShutdownResolver {
       throw new GraphQLError('Hen not found')
     }
 
-    if (hen.userId !== user.id) {
-      throw new GraphQLError('You do not own this hen')
+    if (hen.onchainOwnerAddress) {
+      throw new GraphQLError('Hen is already on-chain')
     }
 
     const signatureData = await generateHenMintSignature(
-      toAddress,
+      normalizedToAddress,
       BigInt(henSerialId),
     )
 

@@ -9,21 +9,56 @@ datasource db {
 }
 
 model User {
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  id              String      @id @default(cuid())
-  serialId        Int         @unique @default(autoincrement())
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  id              String         @id @default(cuid())
+  serialId        Int            @unique @default(autoincrement())
   authTokens      AuthToken[]
-  username        String      @unique
+  verifications   Verification[]
+  username        String         @unique
   ethAddress      String?
   hens            Hen[]
-  originalHens    Hen[]       @relation("OriginalOwner")
-  neynarUserScore Float       @default(0)
-  isVerifiedBot   Boolean     @default(false)
-  totalHoldings   Float       @default(0)
+  originalHens    Hen[]          @relation("OriginalOwner")
+  neynarUserScore Float          @default(0)
+  isVerifiedBot   Boolean        @default(false)
+  totalHoldings   Float          @default(0)
 
   @@index([neynarUserScore])
   @@index([isVerifiedBot])
+}
+
+enum VerificationType {
+  FARCASTER
+}
+
+model Verification {
+  id               String            @id @default(cuid())
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  user             User              @relation(fields: [userId], references: [id])
+  userId           String
+  avatar           String?
+  subjectId        String            @unique
+  username         String?
+  type             VerificationType
+  connectedWallets ConnectedWallet[]
+
+  @@unique([subjectId, type])
+  @@index([userId])
+}
+
+model ConnectedWallet {
+  id             String       @id @default(cuid())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  verification   Verification @relation(fields: [verificationId], references: [id], onDelete: Cascade)
+  verificationId String
+  address        String
+  lastVerified   DateTime     @default(now())
+
+  @@unique([verificationId, address])
+  @@index([verificationId])
+  @@index([address])
 }
 
 model AuthToken {
