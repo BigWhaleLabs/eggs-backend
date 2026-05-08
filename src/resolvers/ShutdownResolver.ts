@@ -2,6 +2,7 @@ import { ethers } from 'ethers'
 import { GraphQLError } from 'graphql'
 import generateHenMintSignature from 'helpers/generateHenMintSignature'
 import { getEggBalances } from 'helpers/getEggBalance'
+import { resolveShutdownUser } from 'helpers/shutdownAuth'
 import type Context from 'models/Context'
 import {
   Arg,
@@ -63,43 +64,20 @@ export default class ShutdownResolver {
   @Query(() => [ShutdownHen])
   async getMyShutdownHens(
     @Arg('ownerAddress', { nullable: true }) ownerAddress: string | null,
+    @Arg('authSignature', { nullable: true }) authSignature: string | null,
     @Ctx() { prisma, user }: Context,
   ): Promise<ShutdownHen[]> {
-    if (ownerAddress && !ethers.isAddress(ownerAddress)) {
-      throw new GraphQLError('Invalid Ethereum address')
-    }
-
-    const normalizedOwnerAddress = ownerAddress
-      ? ethers.getAddress(ownerAddress)
-      : null
-    const authenticatedUserId = user?.id
-
-    if (!normalizedOwnerAddress && !authenticatedUserId) {
-      throw new GraphQLError('Wallet address or auth token required')
-    }
+    const authorizedUser = await resolveShutdownUser({
+      authSignature,
+      ownerAddress,
+      prisma,
+      user,
+    })
 
     return prisma.hen.findMany({
       where: {
-        ...(normalizedOwnerAddress
-          ? {
-              OR: [
-                {
-                  onchainOwnerAddress: {
-                    equals: normalizedOwnerAddress,
-                    mode: 'insensitive' as const,
-                  },
-                },
-                {
-                  user: {
-                    ethAddress: {
-                      equals: normalizedOwnerAddress,
-                      mode: 'insensitive' as const,
-                    },
-                  },
-                },
-              ],
-            }
-          : { userId: authenticatedUserId }),
+        onchainOwnerAddress: null,
+        userId: authorizedUser.id,
       },
       orderBy: {
         serialId: 'asc',
@@ -137,6 +115,7 @@ export default class ShutdownResolver {
   async getHenMintSignature(
     @Arg('henSerialId') henSerialId: number,
     @Arg('toAddress') toAddress: string,
+    @Arg('authSignature', { nullable: true }) authSignature: string | null,
     @Ctx() { prisma, user }: Context,
   ): Promise<HenMintSignature> {
     if (!ethers.isAddress(toAddress)) {
@@ -144,17 +123,17 @@ export default class ShutdownResolver {
     }
 
     const normalizedToAddress = ethers.getAddress(toAddress)
+    const authorizedUser = await resolveShutdownUser({
+      authSignature,
+      ownerAddress: normalizedToAddress,
+      prisma,
+      user,
+    })
 
-    const hen = await prisma.hen.findUnique({
+    const hen = await prisma.hen.findFirst({
       where: {
         serialId: henSerialId,
-      },
-      include: {
-        user: {
-          select: {
-            ethAddress: true,
-          },
-        },
+        userId: authorizedUser.id,
       },
     })
 
@@ -162,13 +141,8 @@ export default class ShutdownResolver {
       throw new GraphQLError('Hen not found')
     }
 
-    const ownedByLegacyAuth = !!user && hen.userId === user.id
-    const ownedByTargetWallet =
-      !!hen.user.ethAddress &&
-      hen.user.ethAddress.toLowerCase() === normalizedToAddress.toLowerCase()
-
-    if (!ownedByLegacyAuth && !ownedByTargetWallet) {
-      throw new GraphQLError('You do not own this hen')
+    if (hen.onchainOwnerAddress) {
+      throw new GraphQLError('Hen is already on-chain')
     }
 
     const signatureData = await generateHenMintSignature(
