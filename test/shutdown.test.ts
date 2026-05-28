@@ -189,7 +189,7 @@ describe('shutdown GraphQL surface', () => {
     const authSignature = await wallet.signMessage(
       getShutdownAuthorizationMessage(ownerAddress),
     )
-    let findFirstArgs: unknown
+    const findFirstArgs: unknown[] = []
 
     const signature = await new ShutdownResolver().getHenMintSignature(
       42,
@@ -202,10 +202,20 @@ describe('shutdown GraphQL surface', () => {
           },
           hen: {
             findFirst: async (args: unknown) => {
-              findFirstArgs = args
+              findFirstArgs.push(args)
+              if (findFirstArgs.length === 2) {
+                return { level: 3 }
+              }
               return {
                 id: 'hen-1',
+                level: 3,
                 onchainOwnerAddress: null,
+                user: {
+                  isVerifiedBot: false,
+                  neynarUserScore: 0.7,
+                  serialId: 1,
+                  totalHoldings: 0,
+                },
                 userId: 'user-1',
               }
             },
@@ -215,13 +225,187 @@ describe('shutdown GraphQL surface', () => {
       } as never,
     )
 
-    expect(findFirstArgs).toEqual({
-      where: {
-        serialId: 42,
-        userId: 'user-1',
+    expect(findFirstArgs).toEqual([
+      {
+        include: {
+          user: true,
+        },
+        where: {
+          serialId: 42,
+          userId: 'user-1',
+        },
       },
-    })
+      {
+        orderBy: {
+          level: 'desc',
+        },
+        select: {
+          level: true,
+        },
+        where: {
+          userId: 'user-1',
+        },
+      },
+    ])
     expect(signature.message.startsWith('0x')).toBe(true)
+    expect(signature.signature.startsWith('0x')).toBe(true)
+  })
+
+  test('rejects mint signatures for sybil-classified users', async () => {
+    const { default: ShutdownResolver } = await import(
+      'resolvers/ShutdownResolver'
+    )
+    const wallet = Wallet.createRandom()
+    const authSignature = await wallet.signMessage(
+      getShutdownAuthorizationMessage(wallet.address),
+    )
+    const findFirstArgs: unknown[] = []
+
+    await expect(
+      new ShutdownResolver().getHenMintSignature(
+        42,
+        wallet.address,
+        authSignature,
+        {
+          prisma: {
+            user: {
+              findMany: async () => [{ id: 'user-1' }],
+            },
+            hen: {
+              findFirst: async (args: unknown) => {
+                findFirstArgs.push(args)
+                if (findFirstArgs.length === 2) {
+                  return { level: 1 }
+                }
+                return {
+                  id: 'hen-1',
+                  level: 1,
+                  onchainOwnerAddress: null,
+                  user: {
+                    isVerifiedBot: false,
+                    neynarUserScore: 0.1,
+                    serialId: 1,
+                    totalHoldings: 0,
+                  },
+                  userId: 'user-1',
+                }
+              },
+            },
+          },
+          user: null,
+        } as never,
+      ),
+    ).rejects.toThrow('Sybil users cannot mint chicken NFTs')
+
+    expect(findFirstArgs).toEqual([
+      {
+        include: {
+          user: true,
+        },
+        where: {
+          serialId: 42,
+          userId: 'user-1',
+        },
+      },
+      {
+        orderBy: {
+          level: 'desc',
+        },
+        select: {
+          level: true,
+        },
+        where: {
+          userId: 'user-1',
+        },
+      },
+    ])
+  })
+
+  test('rejects mint signatures for already on-chain hens', async () => {
+    const { default: ShutdownResolver } = await import(
+      'resolvers/ShutdownResolver'
+    )
+    const wallet = Wallet.createRandom()
+    const authSignature = await wallet.signMessage(
+      getShutdownAuthorizationMessage(wallet.address),
+    )
+
+    await expect(
+      new ShutdownResolver().getHenMintSignature(
+        42,
+        wallet.address,
+        authSignature,
+        {
+          prisma: {
+            user: {
+              findMany: async () => [{ id: 'user-1' }],
+            },
+            hen: {
+              findFirst: async () => ({
+                id: 'hen-1',
+                level: 3,
+                onchainOwnerAddress:
+                  '0x1111111111111111111111111111111111111111',
+                user: {
+                  isVerifiedBot: false,
+                  neynarUserScore: 0.7,
+                  serialId: 1,
+                  totalHoldings: 0,
+                },
+                userId: 'user-1',
+              }),
+            },
+          },
+          user: null,
+        } as never,
+      ),
+    ).rejects.toThrow('Hen is already on-chain')
+  })
+
+  test('keeps mint signatures available for non-sybil high-holding owners', async () => {
+    const { default: ShutdownResolver } = await import(
+      'resolvers/ShutdownResolver'
+    )
+    const wallet = Wallet.createRandom()
+    const authSignature = await wallet.signMessage(
+      getShutdownAuthorizationMessage(wallet.address),
+    )
+    let findFirstCalls = 0
+
+    const signature = await new ShutdownResolver().getHenMintSignature(
+      42,
+      wallet.address,
+      authSignature,
+      {
+        prisma: {
+          user: {
+            findMany: async () => [{ id: 'user-1' }],
+          },
+          hen: {
+            findFirst: async () => {
+              findFirstCalls += 1
+              if (findFirstCalls === 2) {
+                return { level: 1 }
+              }
+              return {
+                id: 'hen-1',
+                level: 1,
+                onchainOwnerAddress: null,
+                user: {
+                  isVerifiedBot: false,
+                  neynarUserScore: 0.1,
+                  serialId: 1,
+                  totalHoldings: 15_000,
+                },
+                userId: 'user-1',
+              }
+            },
+          },
+        },
+        user: null,
+      } as never,
+    )
+
     expect(signature.signature.startsWith('0x')).toBe(true)
   })
 

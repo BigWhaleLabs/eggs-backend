@@ -1,5 +1,6 @@
 import { ethers } from 'ethers'
 import { GraphQLError } from 'graphql'
+import { isChickenMetadataSybil } from 'helpers/chickenMetadata'
 import generateHenMintSignature from 'helpers/generateHenMintSignature'
 import { getEggBalances } from 'helpers/getEggBalance'
 import { resolveShutdownUser } from 'helpers/shutdownAuth'
@@ -136,6 +137,9 @@ export default class ShutdownResolver {
         serialId: henSerialId,
         userId: authorizedUser.id,
       },
+      include: {
+        user: true,
+      },
     })
 
     if (!hen) {
@@ -144,6 +148,27 @@ export default class ShutdownResolver {
 
     if (hen.onchainOwnerAddress) {
       throw new GraphQLError('Hen is already on-chain')
+    }
+
+    const ownerMaxLevelHen = await prisma.hen.findFirst({
+      where: {
+        userId: authorizedUser.id,
+      },
+      orderBy: {
+        level: 'desc',
+      },
+      select: {
+        level: true,
+      },
+    })
+
+    if (
+      isChickenMetadataSybil({
+        ownerMaxLevel: ownerMaxLevelHen?.level || 0,
+        user: hen.user,
+      })
+    ) {
+      throw new GraphQLError('Sybil users cannot mint chicken NFTs')
     }
 
     const signatureData = await generateHenMintSignature(
